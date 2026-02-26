@@ -4,7 +4,6 @@ This guide documents the metrics and outputs used for the "Agentic bias via tool
 
 Scope:
 - Tool selection fairness across demographic subgroups.
-- Tool-order (trajectory) fairness across subgroups.
 - Path-conditioned subgroup performance fairness.
 - Counterfactual planner standardization fairness.
 - Subgroup-conditional tool utility fairness.

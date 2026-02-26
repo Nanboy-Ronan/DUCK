@@ -18,10 +18,10 @@ def load_data(dataset_name, llm_name):
     # In a real implementation, this would load the appropriate data
 
     if dataset_name == "mimic":
-        path = f"/data/zikangxu/Documents/medrax/fairness_eval/logs/{dataset_name}/analysis/fairness/{llm_name}/fairness_posthoc/per_question_features.csv"
+        path = f"./logs/{dataset_name}/analysis/fairness/{llm_name}/fairness_posthoc/per_question_features.csv"
 
     elif dataset_name == "chexagentbench":
-        path = f"/data/zikangxu/Documents/medrax/fairness_eval/logs/{dataset_name}/analysis/{llm_name}/fairness_posthoc/per_question_features.csv"
+        path = f"./logs/{dataset_name}/analysis/{llm_name}/fairness_posthoc/per_question_features.csv"
 
     dataframe = pd.read_csv(path)
     # ic(dataframe.columns)
@@ -198,19 +198,19 @@ def format_result(llm, metrics_dict):
 
 def bootstrap_metrics(dataframe, n_iterations=1000, confidence_level=0.95):
     """
-    对 dataframe 进行 bootstrap 重采样，计算指标的 mean 和 std
+    Bootstrap resample the dataframe and compute metric mean/std.
     """
     from tqdm import tqdm
 
     bootstrap_results = []
 
     for i in tqdm(range(n_iterations), desc="Bootstrap sampling"):
-        # 有放回抽样
+        # Sampling with replacement
         sample = dataframe.sample(n=len(dataframe), replace=True)
         metrics = compute_fairness_metrics(sample)
         bootstrap_results.append(metrics)
 
-    # 计算 mean 和 std
+    # Compute mean and std
     '''
     1. ACC
     2. Delta-ACC (gender, age_raw)
@@ -220,7 +220,7 @@ def bootstrap_metrics(dataframe, n_iterations=1000, confidence_level=0.95):
     '''
     summary = {}
 
-    # 计算置信区间的百分位数
+    # Percentiles for confidence interval
     alpha = 1 - confidence_level
     lower_percentile = (alpha / 2) * 100
     upper_percentile = (1 - alpha / 2) * 100
@@ -397,21 +397,20 @@ def format_multiple_bootstrap_results(llm_results_dict, attribute='gender'):
     Returns:
         Dict mapping LLM names to formatted LaTeX strings
     """
-    # 对于每个指标，确定哪个是最好/次好的
-    # ACC: 越高越好
-    # Delta-ACC, DP, EoD: 越低越好
-    # FUT: 越高越好
+    # Determine best and second-best per metric.
+    # ACC: higher is better
+    # Delta-ACC, DP, EoD: lower is better
+    # FUT: higher is better
     
     llm_names = list(llm_results_dict.keys())
     
-    # 收集所有LLM的指标值（使用mean）
+    # Collect metric values (using mean) for all LLMs
     acc_values = {llm: llm_results_dict[llm]['ACC']['mean'] * 100 for llm in llm_names}
     delta_acc_values = {llm: llm_results_dict[llm]['Delta-ACC'][attribute]['mean'] * 100 for llm in llm_names}
     dp_values = {llm: llm_results_dict[llm]['DP'][attribute]['mean'] * 100 for llm in llm_names}
     eod_values = {llm: llm_results_dict[llm]['EoD'][attribute]['mean'] * 100 for llm in llm_names}
     fut_values = {llm: llm_results_dict[llm]['FUT'][attribute]['mean'] * 100 for llm in llm_names}
     
-    # 找出最好和次好的LLM（对于每个指标）
     def get_best_second(values_dict, higher_is_better=True):
         sorted_llms = sorted(values_dict.keys(), key=lambda x: values_dict[x], reverse=higher_is_better)
         return sorted_llms[0] if len(sorted_llms) > 0 else None, sorted_llms[1] if len(sorted_llms) > 1 else None
@@ -422,13 +421,12 @@ def format_multiple_bootstrap_results(llm_results_dict, attribute='gender'):
     eod_best, eod_second = get_best_second(eod_values, higher_is_better=False)
     fut_best, fut_second = get_best_second(fut_values, higher_is_better=True)
     
-    # 格式化每个LLM的结果
     formatted_results = {}
     
     for llm in llm_names:
         summary = llm_results_dict[llm]
         
-        # 提取所有值
+        # Extract all values
         acc_mean = summary['ACC']['mean'] * 100
         acc_c_low = summary['ACC']['c_low'] * 100
         acc_c_high = summary['ACC']['c_high'] * 100
@@ -449,7 +447,7 @@ def format_multiple_bootstrap_results(llm_results_dict, attribute='gender'):
         fut_c_low = summary['FUT'][attribute]['c_low'] * 100
         fut_c_high = summary['FUT'][attribute]['c_high'] * 100
         
-        # 格式化函数，根据是否最好/次好添加标记
+        # Format helper with best/second-best markers
         def format_value(mean, c_low, c_high, is_best, is_second):
             base = f"{mean:.2f}_{{[{c_low:.2f}, {c_high:.2f}]}}"
             if is_best:
@@ -459,7 +457,7 @@ def format_multiple_bootstrap_results(llm_results_dict, attribute='gender'):
             else:
                 return base
         
-        # 生成LaTeX字符串
+        # Build LaTeX row
         latex_str = f"\\textbf{{{llm}}} & "
         latex_str += f"${format_value(acc_mean, acc_c_low, acc_c_high, llm == acc_best, llm == acc_second)}$ & "
         latex_str += f"${format_value(delta_acc_mean, delta_acc_c_low, delta_acc_c_high, llm == delta_acc_best, llm == delta_acc_second)}$ & "
@@ -481,7 +479,7 @@ if __name__ == "__main__":
                         help="Name(s) of the LLM(s). Can specify multiple LLMs separated by space.")
     args = parser.parse_args()
 
-    # 如果提供了多个LLM，收集所有结果并使用标记最好/次好的格式
+    # If multiple LLMs are provided, aggregate and mark best/second-best.
     if len(args.llm) > 1:
         print(f"\nProcessing {len(args.llm)} LLMs: {args.llm}")
         all_bootstrap_summaries = {}
@@ -493,12 +491,12 @@ if __name__ == "__main__":
                 data_dict, n_iterations=1000, confidence_level=0.95)
             all_bootstrap_summaries[llm] = bootstrap_summary
         
-        # 格式化所有结果，标记最好和次好的
+        # Format all results with best/second-best markers
         print("\nFormatting results with best/second-best marking...")
         formatted_gender_results = format_multiple_bootstrap_results(all_bootstrap_summaries, attribute='gender')
         formatted_age_results = format_multiple_bootstrap_results(all_bootstrap_summaries, attribute='age_raw')
         
-        # 输出结果
+        # Print results
         print("\n" + "="*70)
         print("Gender-based metrics:")
         print("="*70)
@@ -511,7 +509,7 @@ if __name__ == "__main__":
         for llm in args.llm:
             print(formatted_age_results[llm])
         
-        # 保存到文件
+        # Save to file
         with open(f"bootstrap_results_comparison.txt", "w") as f:
             f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - Bootstrap Results for {args.dataset}\n")
             f.write("="*70 + "\n\n")
@@ -528,15 +526,15 @@ if __name__ == "__main__":
         print(f"\nResults saved to bootstrap_results_comparison.txt")
     
     else:
-        # 单个LLM的原有逻辑
+        # Original single-LLM flow
         llm = args.llm[0]
         data_dict = load_data(args.dataset, llm)
 
-        # 原始指标
+        # Raw metrics
         metrics_dict = compute_fairness_metrics(data_dict)
         formatted_result = format_result(llm, metrics_dict)
 
-        # Bootstrap 分析
+        # Bootstrap analysis
         print("\nPerforming bootstrap analysis...")
         bootstrap_summary, all_bootstrap = bootstrap_metrics(
             data_dict, n_iterations=1000, confidence_level=0.95)
