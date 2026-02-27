@@ -105,7 +105,7 @@ python analysis/fairness_posthoc.py \
   --out-dir ./logs/chexagentbench/analysis/qwen3vl8b-vllm/fairness_posthoc
 ```
 
-### B. Fairness decomposition in batch
+### B. Fairness decomposition in dataset
 
 ```bash
 python analysis/fairness_posthoc.py \

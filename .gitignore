@@ -172,7 +172,6 @@ logs/
 temp/
 
 .gradio/
-data/
 skills/
 model-weights/
 figures/

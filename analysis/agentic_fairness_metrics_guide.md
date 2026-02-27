@@ -4,15 +4,9 @@ This guide documents the metrics and outputs used for the "Agentic bias via tool
 
 Scope:
 - Tool selection fairness across demographic subgroups.
-- Path-conditioned subgroup performance fairness.
-- Counterfactual planner standardization fairness.
 - Subgroup-conditional tool utility fairness.
 - Uncertainty-aware usage-gap reporting via bootstrap confidence intervals.
 
-Important:
-- These analyses are observational on historical logs.
-- They quantify disparities and risk signals.
-- They do not by themselves prove causal discrimination.
 
 ## Core Fairness Question
 Does the agent choose different tools and tool paths across subgroups, and do those differences align with subgroup performance disparities?
@@ -44,70 +38,8 @@ How to interpret:
 - `usage_gap ~= 0` suggests exposure parity for that tool.
 - This metric does not say whether the disparity is harmful or beneficial.
 
-## Metric Family B: Path-Conditioned Subgroup Gap (New)
 
-Outputs:
-- `lens_agentic_path_conditioned_gap.csv`
-- Figure: `figures/lens_agentic_path_conditioned_gap_<attribute>.png`
-
-Definition:
-- Build coarse plan buckets: `first_tool + call_count_bin`.
-- For each bucket, compare subgroup accuracies only within that bucket.
-
-Columns (`lens_agentic_path_conditioned_gap.csv`):
-- `attribute`: Sensitive attribute.
-- `plan_bucket`: `"<first_tool>|calls=<0|1-2|3-5|6+>"`.
-- `n_bucket`: Number of questions in that bucket.
-- `groups_with_support`: Number of groups meeting support threshold in bucket.
-- `best_group`: Group with highest bucket accuracy.
-- `worst_group`: Group with lowest bucket accuracy.
-- `best_acc`: Best-group bucket accuracy.
-- `worst_acc`: Worst-group bucket accuracy.
-- `bucket_gap`: `best_acc - worst_acc`.
-
-Fairness meaning:
-- Controls for coarse trajectory mix.
-- If subgroup gap remains inside matched plan buckets, unfairness is not only "different paths chosen"; downstream execution/reasoning differences may contribute.
-
-How to interpret:
-- Large `bucket_gap` in high-support buckets indicates subgroup disparity even under comparable coarse planner behavior.
-- Prioritize buckets with larger `n_bucket` and `groups_with_support >= 2`.
-
-## Metric Family C: Counterfactual Planner Standardization (New)
-
-Outputs:
-- `lens_agentic_counterfactual_policy_eval.csv`
-- `lens_agentic_counterfactual_policy_summary.csv`
-- Figure: `figures/lens_agentic_counterfactual_policy_<attribute>.png`
-
-Definition:
-- Keep each subgroup's within-bucket accuracy.
-- Reweight subgroup accuracies to a common global plan-bucket distribution.
-- This simulates all groups sharing the same planner trajectory mix.
-
-Columns (`lens_agentic_counterfactual_policy_eval.csv`):
-- `attribute`
-- `group`
-- `standardized_accuracy`
-
-Columns (`lens_agentic_counterfactual_policy_summary.csv`):
-- `attribute`
-- `n`: Sample size used for this attribute.
-- `n_groups`
-- `raw_gap`: Max minus min subgroup raw accuracy.
-- `path_standardized_gap`: Max minus min subgroup standardized accuracy.
-- `gap_reduction`: `raw_gap - path_standardized_gap`.
-
-Fairness meaning:
-- Estimates how much disparity is attributable to planner path mix.
-- Larger `gap_reduction` means trajectory differences likely explain more disparity.
-
-How to interpret:
-- `gap_reduction > 0`: planner path mix appears to contribute to observed subgroup gap.
-- `gap_reduction ~= 0`: planner mix explains little; look at tool reliability and reasoning layers.
-- `path_standardized_gap` still large: residual fairness risk beyond planner path allocation.
-
-## Metric Family D: Tool-Order Transition Disparity (New)
+## Metric Family: Tool-Order Transition Disparity
 
 Outputs:
 - `lens_agentic_transition_rates_by_group.csv`
@@ -146,53 +78,8 @@ How to interpret:
 - Higher JSD: subgroup trajectory patterns differ materially.
 - Use `transition_rates_by_group` to locate which transitions drive high JSD.
 
-## Metric Family E: Conditional Tool Utility by Subgroup (New)
 
-Outputs:
-- `lens_agentic_conditional_tool_utility.csv`
-- `lens_agentic_conditional_tool_utility_gap.csv`
-- Figure: `figures/lens_agentic_conditional_tool_utility_gap_<attribute>.png`
-
-Definition:
-- For each subgroup and tool:
-- Compute unadjusted uplift: `Acc(used) - Acc(not_used)`.
-- Compute question-type-adjusted uplift by averaging within question type and reweighting.
-- Add bootstrap CI for unadjusted uplift.
-
-Columns (`lens_agentic_conditional_tool_utility.csv`):
-- `attribute`
-- `group`
-- `tool`
-- `n_total`
-- `n_used`
-- `n_not_used`
-- `unadjusted_uplift`
-- `qtype_adjusted_uplift`
-- `ci_low`
-- `ci_high`
-- `n_qtypes_supported`: Count of question types with enough used/not-used support.
-- `support_ok`: 1 when subgroup/tool has enough support for used vs not-used comparison.
-
-Columns (`lens_agentic_conditional_tool_utility_gap.csv`):
-- `attribute`
-- `tool`
-- `best_group`
-- `worst_group`
-- `best_qtype_adjusted_uplift`
-- `worst_qtype_adjusted_uplift`
-- `uplift_gap`
-
-Fairness meaning:
-- Detects whether the same tool has different subgroup utility/harm profiles.
-- Strongly relevant when planner uses a tool similarly across groups but impact differs.
-
-How to interpret:
-- Positive uplift means tool use is associated with better subgroup accuracy.
-- Negative uplift means possible subgroup harm when that tool is used.
-- Large `uplift_gap` means unequal benefit/harm across groups.
-- Give more weight to rows with `support_ok=1`, larger `n_used/n_not_used`, and non-trivial `n_qtypes_supported`.
-
-## Metric Family F: Usage Gap with Uncertainty (New)
+## Metric Family: Usage Gap with Uncertainty (New)
 
 Output:
 - `lens_agentic_tool_usage_gap_ci.csv`
