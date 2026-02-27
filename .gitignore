@@ -181,7 +181,6 @@ figures/
 *.pdf
 *.csv
 *.json
-*.jsonl
 *.jpg
 *.tar.gz
 *.txt
