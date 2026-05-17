@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite the DUCX paper."
+title: "DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents"
+authors:
+  - family-names: Xu
+    given-names: Zikang
+  - family-names: Jin
+    given-names: Ruinan
+  - family-names: Li
+    given-names: Xiaoxiao
+year: 2026
+url: "https://arxiv.org/abs/2603.00777"
+preferred-citation:
+  type: article
+  title: "DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents"
+  authors:
+    - family-names: Xu
+      given-names: Zikang
+    - family-names: Jin
+      given-names: Ruinan
+    - family-names: Li
+      given-names: Xiaoxiao
+  year: 2026
+  journal: "arXiv preprint arXiv:2603.00777"

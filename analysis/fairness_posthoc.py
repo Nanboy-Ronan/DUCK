@@ -626,6 +626,266 @@ def save_grouped_bar_from_pivot(pivot_df: pd.DataFrame, title: str, y_label: str
     plt.close()
 
 
+PAPER_TOOL_LABELS = {
+    "chest_xray_classifier": "CLS",
+    "classifier": "CLS",
+    "chest_xray_expert": "QA",
+    "llava_med_qa": "QA",
+    "xray_vqa": "QA",
+    "chest_xray_report_generator": "RG",
+    "report_generator": "RG",
+    "chest_xray_segmentation": "SEG",
+    "segmentation": "SEG",
+    "image_visualizer": "VIS",
+    "visualizer": "VIS",
+    "xray_phrase_grounding": "GRD",
+    "phrase_grounding": "GRD",
+    "START": "START",
+}
+PAPER_TOOL_ORDER = ["CLS", "QA", "RG", "SEG", "VIS", "GRD"]
+PAPER_TRANSITION_ORDER = ["START", "CLS", "QA", "RG", "SEG", "VIS", "GRD"]
+
+
+def paper_tool_label(name: Any) -> str:
+    raw = str(name or "").strip()
+    return PAPER_TOOL_LABELS.get(raw, raw.upper())
+
+
+def infer_dataset_label(meta_q_path: Path, log_path: Path) -> str:
+    text = f"{meta_q_path} {log_path}".lower()
+    if "mimic" in text:
+        return "MIMIC-FairnessVQA"
+    return "CheXAgentBench"
+
+
+def infer_model_label(log_path: Path) -> str:
+    name = log_path.stem
+    for prefix in ("agent_", "run_"):
+        if name.startswith(prefix):
+            name = name[len(prefix) :]
+    name = re.sub(r"_\d{8}_\d{6}$", "", name)
+    replacements = {
+        "gemini-3-flash-preview": "Gemini3",
+        "qwen3vl8b-vllm": "Qwen3VL",
+        "qwen3-vl-8b": "Qwen3VL",
+        "qwen38b-vllm": "Qwen3",
+        "qwen3-8b": "Qwen3",
+        "llama-3.1-8b-vllm": "LLaMA3.1",
+        "mistral-7b-vllm": "Ministral-3",
+        "ministral-3-8b": "Ministral-3",
+    }
+    return replacements.get(name, name)
+
+
+def build_paper_figure2_data(
+    utility_gap_df: pd.DataFrame,
+    dataset_label: str,
+    model_label: str,
+) -> pd.DataFrame:
+    if utility_gap_df.empty:
+        return pd.DataFrame(columns=["dataset", "model", "attribute", "tool", "delta_acc_abs_pct"])
+    df = utility_gap_df.copy()
+    df["dataset"] = dataset_label
+    df["model"] = model_label
+    df["tool"] = df["tool"].map(paper_tool_label)
+    df["delta_acc_abs_pct"] = pd.to_numeric(df["uplift_gap"], errors="coerce").abs() * 100.0
+    df = (
+        df.groupby(["dataset", "model", "attribute", "tool"], as_index=False)["delta_acc_abs_pct"]
+        .mean()
+        .sort_values(["dataset", "attribute", "tool", "model"])
+    )
+    return df
+
+
+def plot_paper_figure2(fig2_df: pd.DataFrame, out_path: Path) -> None:
+    if fig2_df.empty:
+        return
+    datasets = [d for d in ["CheXAgentBench", "MIMIC-FairnessVQA"] if d in set(fig2_df["dataset"])]
+    attrs = [a for a in ["gender_norm", "age_group"] if a in set(fig2_df["attribute"])]
+    if not datasets or not attrs:
+        return
+    fig, axes = plt.subplots(len(datasets), len(attrs), figsize=(5.6 * len(attrs), 4.2 * len(datasets)), squeeze=False)
+    rng = np.random.default_rng(42)
+    titles = {"gender_norm": "Gender", "age_group": "Age"}
+    for r, dataset in enumerate(datasets):
+        for c, attr in enumerate(attrs):
+            ax = axes[r][c]
+            sub = fig2_df[(fig2_df["dataset"] == dataset) & (fig2_df["attribute"] == attr)]
+            positions = np.arange(len(PAPER_TOOL_ORDER))
+            values_by_tool = [
+                sub[sub["tool"] == tool]["delta_acc_abs_pct"].dropna().to_numpy(dtype=float)
+                for tool in PAPER_TOOL_ORDER
+            ]
+            nonempty = [(pos, vals) for pos, vals in zip(positions, values_by_tool) if len(vals) > 0]
+            if nonempty:
+                ax.violinplot(
+                    [vals for _, vals in nonempty],
+                    positions=[pos for pos, _ in nonempty],
+                    widths=0.72,
+                    showmeans=True,
+                    showextrema=False,
+                )
+                for pos, vals in nonempty:
+                    jitter = rng.normal(0, 0.035, size=len(vals))
+                    ax.scatter(np.full(len(vals), pos) + jitter, vals, s=24, color="black", alpha=0.75, zorder=3)
+            ax.set_xticks(positions)
+            ax.set_xticklabels(PAPER_TOOL_ORDER)
+            ax.set_ylabel(r"$|\Delta ACC|$ conditioned on tool (%)")
+            ax.set_title(f"{titles.get(attr, attr)} on {dataset}")
+            ax.grid(axis="y", alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def build_paper_figure3_data(
+    transition_df: pd.DataFrame,
+    dataset_label: str,
+    model_label: str,
+) -> pd.DataFrame:
+    if transition_df.empty:
+        return pd.DataFrame(columns=["dataset", "model", "attribute", "from_tool", "to_tool", "delta_rate"])
+    rows: List[Dict[str, Any]] = []
+    desired_pairs = {
+        "gender_norm": ("male", "female"),
+        "age_group": ("young", "old"),
+    }
+    df = transition_df.copy()
+    split = df["transition"].astype(str).str.split("->", n=1, expand=True)
+    df["from_tool"] = split[0].map(paper_tool_label)
+    df["to_tool"] = split[1].map(paper_tool_label)
+    df["rate"] = pd.to_numeric(df["rate"], errors="coerce")
+    df = (
+        df.groupby(["attribute", "group", "from_tool", "to_tool"], as_index=False)["rate"]
+        .sum()
+    )
+    for attr, (positive_group, negative_group) in desired_pairs.items():
+        sub = df[df["attribute"] == attr]
+        if sub.empty:
+            continue
+        piv = sub.pivot_table(
+            index=["from_tool", "to_tool"],
+            columns="group",
+            values="rate",
+            aggfunc="sum",
+            fill_value=0.0,
+        )
+        if positive_group not in piv.columns or negative_group not in piv.columns:
+            continue
+        for (from_tool, to_tool), vals in piv.iterrows():
+            if from_tool not in PAPER_TRANSITION_ORDER or to_tool not in PAPER_TRANSITION_ORDER:
+                continue
+            rows.append(
+                {
+                    "dataset": dataset_label,
+                    "model": model_label,
+                    "attribute": attr,
+                    "from_tool": from_tool,
+                    "to_tool": to_tool,
+                    "delta_rate": float(vals[positive_group] - vals[negative_group]),
+                }
+            )
+    out = pd.DataFrame(rows)
+    if out.empty:
+        return pd.DataFrame(columns=["dataset", "model", "attribute", "from_tool", "to_tool", "delta_rate"])
+    return (
+        out.groupby(["dataset", "model", "attribute", "from_tool", "to_tool"], as_index=False)["delta_rate"]
+        .mean()
+        .sort_values(["dataset", "attribute", "from_tool", "to_tool", "model"])
+    )
+
+
+def plot_paper_figure3(fig3_df: pd.DataFrame, out_path: Path) -> None:
+    if fig3_df.empty:
+        return
+    datasets = [d for d in ["CheXAgentBench", "MIMIC-FairnessVQA"] if d in set(fig3_df["dataset"])]
+    attrs = [a for a in ["gender_norm", "age_group"] if a in set(fig3_df["attribute"])]
+    if not datasets or not attrs:
+        return
+    fig, axes = plt.subplots(
+        len(datasets),
+        len(attrs),
+        figsize=(5.4 * len(attrs) + 0.4, 4.8 * len(datasets)),
+        squeeze=False,
+    )
+    fig.subplots_adjust(right=0.88, wspace=0.34, hspace=0.38)
+    titles = {"gender_norm": r"$P_{male} - P_{female}$", "age_group": r"$P_{young} - P_{old}$"}
+    max_abs = float(np.nanmax(np.abs(fig3_df["delta_rate"].to_numpy(dtype=float)))) if len(fig3_df) else 0.0
+    vmax = max(max_abs, 1e-6)
+    for r, dataset in enumerate(datasets):
+        for c, attr in enumerate(attrs):
+            ax = axes[r][c]
+            sub = fig3_df[(fig3_df["dataset"] == dataset) & (fig3_df["attribute"] == attr)]
+            mat = (
+                sub.pivot_table(index="from_tool", columns="to_tool", values="delta_rate", aggfunc="mean")
+                .reindex(index=PAPER_TRANSITION_ORDER, columns=PAPER_TOOL_ORDER)
+                .fillna(0.0)
+            )
+            im = ax.imshow(mat.to_numpy(), cmap="coolwarm", vmin=-vmax, vmax=vmax, aspect="auto")
+            ax.set_xticks(np.arange(len(PAPER_TOOL_ORDER)))
+            ax.set_xticklabels(PAPER_TOOL_ORDER, rotation=45, ha="right")
+            ax.set_yticks(np.arange(len(PAPER_TRANSITION_ORDER)))
+            ax.set_yticklabels(PAPER_TRANSITION_ORDER)
+            ax.set_title(f"{dataset}: {titles.get(attr, attr)}")
+            for i in range(mat.shape[0]):
+                for j in range(mat.shape[1]):
+                    val = mat.iloc[i, j]
+                    ax.text(j, i, f"{val:.2f}", ha="center", va="center", fontsize=8)
+    cbar_ax = fig.add_axes([0.91, 0.18, 0.018, 0.64])
+    cbar = fig.colorbar(im, cax=cbar_ax)
+    cbar.ax.set_ylabel("Transition-rate difference", rotation=90)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
+def write_paper_figures_only_outputs(
+    out_dir: Path,
+    log_path: Path,
+    meta_q_path: Path,
+    dataset_label: Optional[str] = None,
+    model_label: Optional[str] = None,
+) -> None:
+    dataset = dataset_label or infer_dataset_label(meta_q_path, log_path)
+    model = model_label or infer_model_label(log_path)
+    fig_dir = out_dir / "figures"
+    fig_dir.mkdir(parents=True, exist_ok=True)
+
+    utility_gap = pd.read_csv(out_dir / "lens_agentic_conditional_tool_utility_gap.csv")
+    transition_rates = pd.read_csv(out_dir / "lens_agentic_transition_rates_by_group.csv")
+    fig2_df = build_paper_figure2_data(utility_gap, dataset, model)
+    fig3_df = build_paper_figure3_data(transition_rates, dataset, model)
+    fig2_df.to_csv(out_dir / "paper_figure2_tool_exposure_data.csv", index=False)
+    fig3_df.to_csv(out_dir / "paper_figure3_tool_transition_data.csv", index=False)
+    plot_paper_figure2(fig2_df, fig_dir / "paper_figure2_tool_exposure_bias.png")
+    plot_paper_figure3(fig3_df, fig_dir / "paper_figure3_tool_transition_bias.png")
+
+    manifest = {
+        "mode": "paper_figures_only",
+        "dataset": dataset,
+        "model": model,
+        "source_log": str(log_path),
+        "figures": sorted(p.name for p in fig_dir.glob("paper_figure*.png")),
+        "data": [
+            "paper_figure2_tool_exposure_data.csv",
+            "paper_figure3_tool_transition_data.csv",
+        ],
+        "note": "Single-log diagnostic panels only. Use analysis/generate_paper_figures.py with all five driver-LLM fairness_posthoc outputs for both datasets to reproduce the full paper figures.",
+    }
+    (out_dir / "paper_figure_manifest.json").write_text(json.dumps(manifest, indent=2))
+
+    allowed_root = {
+        "paper_figure2_tool_exposure_data.csv",
+        "paper_figure3_tool_transition_data.csv",
+        "paper_figure_manifest.json",
+    }
+    for path in out_dir.iterdir():
+        if path.is_file() and path.name not in allowed_root:
+            path.unlink()
+    for path in fig_dir.glob("*"):
+        if path.name not in set(manifest["figures"]):
+            path.unlink()
+
+
 def top_abs_gap_by_col(df: pd.DataFrame, group_col: str, value_cols: List[str]) -> pd.DataFrame:
     rows = []
     if df.empty:
@@ -767,6 +1027,9 @@ def run_single(
     judge_api_key_env: str = "DEEPSEEK_API_KEY",
     judge_max_samples: Optional[int] = None,
     judge_concurrency: int = 10,
+    paper_figures_only: bool = False,
+    paper_dataset_label: Optional[str] = None,
+    paper_model_label: Optional[str] = None,
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     fig_dir = out_dir / "figures"
@@ -2296,6 +2559,15 @@ def run_single(
     lens_report.append("- Prompt sensitivity results are observational from existing logs, not counterfactual prompt-rewrite experiments.")
     (out_dir / "fairness_lens_report.md").write_text("\n".join(lens_report))
 
+    if paper_figures_only:
+        write_paper_figures_only_outputs(
+            out_dir=out_dir,
+            log_path=log_path,
+            meta_q_path=meta_q_path,
+            dataset_label=paper_dataset_label,
+            model_label=paper_model_label,
+        )
+
 
 def run_batch(
     input_root: Path,
@@ -2309,6 +2581,8 @@ def run_batch(
     judge_api_key_env: str = "DEEPSEEK_API_KEY",
     judge_max_samples: Optional[int] = None,
     judge_concurrency: int = 10,
+    paper_figures_only: bool = False,
+    paper_dataset_label: Optional[str] = None,
 ) -> None:
     out_root.mkdir(parents=True, exist_ok=True)
 
@@ -2339,6 +2613,9 @@ def run_batch(
             judge_api_key_env=judge_api_key_env,
             judge_max_samples=judge_max_samples,
             judge_concurrency=judge_concurrency,
+            paper_figures_only=paper_figures_only,
+            paper_dataset_label=paper_dataset_label,
+            paper_model_label=baseline_name,
         ) # meta_q: PosixPath('./data/chestagentbench/metadata.jsonl') meta_case: PosixPath('./data/eurorad_metadata.json')
 
 
@@ -2414,6 +2691,24 @@ if __name__ == "__main__":
         default=10,
         help="Number of concurrent DeepSeek judge requests.",
     )
+    parser.add_argument(
+        "--paper-figures-only",
+        action="store_true",
+        help=(
+            "Strict release mode: after reading the log, keep only paper Fig. 2/Fig. 3 "
+            "outputs plus their backing CSV data and manifest."
+        ),
+    )
+    parser.add_argument(
+        "--paper-dataset-label",
+        default=None,
+        help="Optional dataset label for paper figures, e.g. CheXAgentBench or MIMIC-FairnessVQA.",
+    )
+    parser.add_argument(
+        "--paper-model-label",
+        default=None,
+        help="Optional model label for paper figures, e.g. Gemini3.",
+    )
     args = parser.parse_args()
     meta_q_path = Path(args.meta_q_path)
     meta_case_path = Path(args.meta_case_path)
@@ -2433,6 +2728,8 @@ if __name__ == "__main__":
             judge_api_key_env=args.judge_api_key_env,
             judge_max_samples=args.judge_max_samples,
             judge_concurrency=args.judge_concurrency,
+            paper_figures_only=args.paper_figures_only,
+            paper_dataset_label=args.paper_dataset_label,
         )
     else:
         run_single(
@@ -2447,4 +2744,7 @@ if __name__ == "__main__":
             judge_api_key_env=args.judge_api_key_env,
             judge_max_samples=args.judge_max_samples,
             judge_concurrency=args.judge_concurrency,
+            paper_figures_only=args.paper_figures_only,
+            paper_dataset_label=args.paper_dataset_label,
+            paper_model_label=args.paper_model_label,
         )

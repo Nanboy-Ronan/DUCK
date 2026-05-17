@@ -5,11 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "medrax"
 version = "0.1.0"
-description = "medical reasoning agent for chest x-ray"
+description = "DUCX fairness auditing for tool-using chest X-ray agents"
 authors = [
-    {name = "Anonymous"},
+    {name = "Zikang Xu"},
+    {name = "Ruinan Jin"},
+    {name = "Xiaoxiao Li"},
 ]
 license = {file = "LICENSE"}
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "requests>=2.25.0",
@@ -28,7 +31,6 @@ dependencies = [
     "markdown2[all]>=2.4.0",
     "protobuf>=3.15.0",
     "scikit-learn>=0.24.0",
-    "gradio>=3.0.0",
     "gradio_client>=0.2.0",
     "httpx>=0.23.0",
     "uvicorn>=0.15.0",
@@ -37,7 +39,7 @@ dependencies = [
     "einops-exts>=0.0.4",
     "timm>=0.5.0",
     "tiktoken>=0.3.0",
-    "openai>=0.27.0",
+    "openai>=1.0.0",
     "backoff>=1.10.0",
     "torch>=2.2.0",
     "torchvision>=0.10.0",
@@ -63,6 +65,7 @@ dependencies = [
     "llava>=0.0.1.dev0",
     "fairlearn>=0.13.0",
     "jsonlines>=4.0.0",
+    "tqdm>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -72,6 +75,10 @@ dev = [
     "isort",
     "flake8",
     "mypy",
+]
+gemini = [
+    "langchain-google-genai",
+    "google-generativeai",
 ]
 
 [tool.setuptools.packages.find]

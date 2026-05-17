@@ -32,9 +32,6 @@ from datasets import load_dataset
 import openai
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from main import initialize_agent
-
-
 logger = logging.getLogger("chexbench_agent")
 
 
@@ -540,6 +537,8 @@ def main() -> None:
     else:
         if args.disable_parallel_tool_calls:
             parallel_tool_calls = False
+        from main import initialize_agent
+
         agent, _ = initialize_agent(
             args.prompt_file,
             tools_to_use=tools,

@@ -1,0 +1,11 @@
+DUCX builds on MedRAX: Medical Reasoning Agent for Chest X-ray.
+
+MedRAX project:
+https://github.com/bowang-lab/MedRAX
+
+MedRAX paper:
+Adibvafa Fallahpour, Jun Ma, Alif Munim, Hongwei Lyu, Bo Wang.
+"MedRAX: Medical Reasoning Agent for Chest X-ray." ICML 2025.
+
+Portions of this repository are derived from or adapted from MedRAX, which is
+distributed under the Apache License, Version 2.0.
