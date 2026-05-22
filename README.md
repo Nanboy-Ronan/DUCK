@@ -7,7 +7,7 @@
 <a href="https://2026.miccai.org/"><img src="https://img.shields.io/badge/MICCAI-2026_early_accept-5b8c5a.svg?style=flat-square" alt="MICCAI 2026"></a>
 <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat-square&logo=python" alt="Python"></a>
 
-**Zikang Xu$^{1*}$** · **Ruinan Jin$^{2,3*}$** · **Xiaoxiao Li$^{2,3*}$**
+**Zikang Xu$^{1*}$** · **Ruinan Jin$^{2,3*}$** · **Xiaoxiao Li$^{2,3📧}$**
 
 *$^{1}$ Institute of Artificial Intelligence, Hefei Comprehensive National Science Center*
 
