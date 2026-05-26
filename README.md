@@ -7,13 +7,17 @@
 <a href="https://2026.miccai.org/"><img src="https://img.shields.io/badge/MICCAI-2026_early_accept-5b8c5a.svg?style=flat-square" alt="MICCAI 2026"></a>
 <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat-square&logo=python" alt="Python"></a>
 
-**Zikang Xu$^{1*}$** · **Ruinan Jin$^{2,3*}$** · **Xiaoxiao Li$^{2,3📧}$**
+Zikang Xu<sup>1*</sup> · Ruinan Jin<sup>2,3*</sup> · Xiaoxiao Li<sup>2,3†</sup>
 
-*$^{1}$ Institute of Artificial Intelligence, Hefei Comprehensive National Science Center*
+<sup>1</sup> Institute of Artificial Intelligence, Hefei Comprehensive National Science Center  
 
-*$^{2}$ The University of British Columbia*
+<sup>2</sup> The University of British Columbia  
 
-*$^{3}$ Vector Institute*
+<sup>3</sup> Vector Institute  
+
+<sup>*</sup> Equal contribution  
+
+<sup>†</sup> Corresponding author
 
 [📄 Paper](https://arxiv.org/abs/2603.00777) · [🤗 Data](#) · [📊 Quickstart](notebooks/DUCX_quickstart.ipynb)
 

@@ -175,7 +175,7 @@ model-weights/
 figures/
 
 # generated results
-*.png
+# *.png
 *.pdf
 *.csv
 *.json
