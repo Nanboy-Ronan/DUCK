@@ -7,7 +7,7 @@
   <!-- ── Primary SEO ─────────────────────────────────────────────── -->
   <title>DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents</title>
   <meta name="description"
-        content="DUCX audits demographic fairness in MedRAX-style chest X-ray AI agents, decomposing bias into tool-exposure, tool-transition, and LLM-reasoning components across five driver LLMs on ChestAgentBench and MIMIC-FairnessVQA." />
+        content="DUCX audits demographic fairness in MedRAX-style chest X-ray AI agents, decomposing bias into tool-exposure, tool-transition, and LLM-reasoning components across five driver LLMs on ChestAgentBench and MIMIC-FairnessVQA. Early accepted at MICCAI 2026." />
   <meta name="keywords"
         content="medical AI fairness, chest X-ray fairness, demographic bias, LLM bias, radiology AI, tool-using agents, agentic AI fairness, MIMIC, ChestAgentBench, bias decomposition, equalized odds, MedRAX" />
   <meta name="author" content="Zikang Xu, Ruinan Jin, Xiaoxiao Li" />
@@ -47,6 +47,7 @@
     ],
     "datePublished": "2026",
     "publisher": {"@type": "Organization", "name": "arXiv"},
+    "isPartOf": {"@type": "Event", "name": "Medical Image Computing and Computer-Assisted Intervention (MICCAI 2026)"},
     "identifier": "arXiv:2603.00777",
     "codeRepository": "https://github.com/Nanboy-Ronan/DUCK",
     "keywords": ["medical AI", "fairness", "chest X-ray", "LLM bias", "radiology", "tool-using agents"]
@@ -303,7 +304,7 @@
 ════════════════════════════════════════════════════════════════════ -->
 <header class="hero">
   <div class="container">
-    <div class="venue-tag">arXiv 2026 &nbsp;·&nbsp; Medical AI Fairness</div>
+    <div class="venue-tag">MICCAI 2026 &nbsp;·&nbsp; Early Accept &nbsp;·&nbsp; Preprint</div>
     <h1>
       <span class="ducx">DUCX</span>: Decomposing Unfairness in<br />
       Tool-Using Chest X-ray Agents
@@ -316,6 +317,17 @@
     </div>
     <p class="affil">University of British Columbia</p>
     <p class="affil" style="font-size:.78rem; margin-top:-.6rem; opacity:.7;"><sup>*</sup> Equal contribution</p>
+
+    <!-- MICCAI accept badge -->
+    <div style="margin-bottom:1.6rem;">
+      <span style="display:inline-flex; align-items:center; gap:.5rem;
+                   background:rgba(167,139,250,0.18); border:1px solid rgba(167,139,250,0.5);
+                   border-radius:24px; padding:.4rem 1.1rem; font-size:.82rem; font-weight:600;
+                   letter-spacing:.03em; color:#d8b4fe;">
+        🏆&nbsp; Early Accepted at <strong style="color:#f0e6ff;">MICCAI 2026</strong>
+        &nbsp;·&nbsp; <span style="font-weight:400; opacity:.8;">Preprint</span>
+      </span>
+    </div>
 
     <div class="btn-row">
       <a class="btn btn-paper"
@@ -517,14 +529,15 @@ jupyter notebook notebooks/DUCX_quickstart.ipynb</pre>
   <div class="container">
     <h2 class="section-title">📖 Citation</h2>
     <p style="color:#555; margin-bottom:1.2rem;">
-      If you use DUCX in your research, please cite:
+      If you use DUCX in your research, please cite our MICCAI 2026 paper (early accepted; preprint on arXiv):
     </p>
     <div style="position:relative;">
-      <div class="bibtex-box" id="bibtex-content">@article{xu2026ducx,
-  title   = {DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents},
-  author  = {Xu, Zikang and Jin, Ruinan and Li, Xiaoxiao},
-  journal = {arXiv preprint arXiv:2603.00777},
-  year    = {2026}
+      <div class="bibtex-box" id="bibtex-content">@inproceedings{xu2026ducx,
+  title     = {DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents},
+  author    = {Xu, Zikang and Jin, Ruinan and Li, Xiaoxiao},
+  booktitle = {Medical Image Computing and Computer-Assisted Intervention (MICCAI)},
+  year      = {2026},
+  note      = {Early Accept. Preprint: arXiv:2603.00777}
 }</div>
       <button class="copy-btn" onclick="copyBibtex()" id="copy-btn">Copy</button>
     </div>
@@ -538,6 +551,7 @@ jupyter notebook notebooks/DUCX_quickstart.ipynb</pre>
 <footer>
   <p>
     DUCX &nbsp;·&nbsp;
+    MICCAI 2026 (Early Accept) &nbsp;·&nbsp;
     <a href="https://arxiv.org/abs/2603.00777" target="_blank">arXiv:2603.00777</a> &nbsp;·&nbsp;
     <a href="https://github.com/Nanboy-Ronan/DUCK" target="_blank">GitHub</a> &nbsp;·&nbsp;
     Released under the <a href="https://github.com/Nanboy-Ronan/DUCK/blob/main/LICENSE">Apache 2.0 License</a>
