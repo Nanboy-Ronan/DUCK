@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- ── Primary SEO ─────────────────────────────────────────────── -->
+  <title>DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents</title>
+  <meta name="description"
+        content="DUCX audits demographic fairness in MedRAX-style chest X-ray AI agents, decomposing bias into tool-exposure, tool-transition, and LLM-reasoning components across five driver LLMs on ChestAgentBench and MIMIC-FairnessVQA." />
+  <meta name="keywords"
+        content="medical AI fairness, chest X-ray fairness, demographic bias, LLM bias, radiology AI, tool-using agents, agentic AI fairness, MIMIC, ChestAgentBench, bias decomposition, equalized odds, MedRAX" />
+  <meta name="author" content="Zikang Xu, Ruinan Jin, Xiaoxiao Li" />
+  <link rel="canonical" href="https://nanboy-ronan.github.io/DUCK/" />
+
+  <!-- ── Open Graph (social previews) ────────────────────────────── -->
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://nanboy-ronan.github.io/DUCK/" />
+  <meta property="og:title"       content="DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents" />
+  <meta property="og:description" content="A fairness audit framework that pinpoints where bias enters agentic chest X-ray AI — tool selection, routing, or LLM reasoning." />
+  <meta property="og:image"       content="https://nanboy-ronan.github.io/DUCK/assets/og-card.png" />
+  <meta name="twitter:card"       content="summary_large_image" />
+
+  <!-- ── Google Scholar / Citation metadata ──────────────────────── -->
+  <meta name="citation_title"           content="DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents" />
+  <meta name="citation_author"          content="Xu, Zikang" />
+  <meta name="citation_author"          content="Jin, Ruinan" />
+  <meta name="citation_author"          content="Li, Xiaoxiao" />
+  <meta name="citation_publication_date" content="2026" />
+  <meta name="citation_arxiv_id"        content="2603.00777" />
+  <meta name="citation_abstract_html_url" content="https://arxiv.org/abs/2603.00777" />
+  <meta name="citation_pdf_url"         content="https://arxiv.org/pdf/2603.00777" />
+
+  <!-- ── Schema.org structured data ─────────────────────────────── -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "ScholarlyArticle",
+    "name": "DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents",
+    "headline": "DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents",
+    "description": "DUCX audits demographic fairness in MedRAX-style chest X-ray agents and decomposes bias into tool-exposure, tool-transition, and LLM-reasoning components.",
+    "url": "https://arxiv.org/abs/2603.00777",
+    "author": [
+      {"@type": "Person", "name": "Zikang Xu"},
+      {"@type": "Person", "name": "Ruinan Jin"},
+      {"@type": "Person", "name": "Xiaoxiao Li"}
+    ],
+    "datePublished": "2026",
+    "publisher": {"@type": "Organization", "name": "arXiv"},
+    "identifier": "arXiv:2603.00777",
+    "codeRepository": "https://github.com/Nanboy-Ronan/DUCK",
+    "keywords": ["medical AI", "fairness", "chest X-ray", "LLM bias", "radiology", "tool-using agents"]
+  }
+  </script>
+
+  <!-- ── Fonts & Icons ────────────────────────────────────────────── -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: #fafafa;
+      color: #1a1a2e;
+      line-height: 1.65;
+    }
+
+    /* ── Layout helpers ───────────────────────────────────────────── */
+    .container { max-width: 900px; margin: 0 auto; padding: 0 1.5rem; }
+    section { padding: 4rem 0; }
+    section + section { border-top: 1px solid #e8e8f0; }
+
+    /* ── Hero ─────────────────────────────────────────────────────── */
+    header.hero {
+      background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+      color: #fff;
+      padding: 5rem 1.5rem 4rem;
+      text-align: center;
+    }
+    .venue-tag {
+      display: inline-block;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
+      padding: .3rem 1rem;
+      font-size: .8rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+    }
+    h1 {
+      font-size: clamp(1.6rem, 4vw, 2.6rem);
+      font-weight: 700;
+      line-height: 1.2;
+      max-width: 800px;
+      margin: 0 auto 1.8rem;
+    }
+    h1 span.ducx { color: #a78bfa; }
+
+    /* Authors */
+    .authors {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .5rem 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .authors a {
+      color: #c4b5fd;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .authors a:hover { text-decoration: underline; }
+    .affil {
+      font-size: .85rem;
+      color: rgba(255,255,255,.6);
+      margin-bottom: 2rem;
+    }
+
+    /* Buttons */
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .75rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      padding: .55rem 1.3rem;
+      border-radius: 8px;
+      font-size: .9rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity .2s, transform .15s;
+    }
+    .btn:hover { opacity: .85; transform: translateY(-1px); }
+    .btn-paper  { background: #fff;      color: #1a1a2e; }
+    .btn-code   { background: #24292e;   color: #fff; }
+    .btn-colab  { background: #f9ab00;   color: #000; }
+    .btn-data   { background: #0078d4;   color: #fff; }
+
+    /* ── Abstract ─────────────────────────────────────────────────── */
+    #abstract h2, #method h2, #results h2, #citation h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1.2rem;
+      color: #1a1a2e;
+    }
+    .abstract-box {
+      background: #fff;
+      border: 1px solid #e0e0f0;
+      border-left: 4px solid #7c3aed;
+      border-radius: 10px;
+      padding: 1.8rem 2rem;
+      font-size: 1rem;
+      line-height: 1.8;
+    }
+
+    /* ── TL;DR chips ──────────────────────────────────────────────── */
+    .tldr-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .6rem;
+      margin-top: 1.4rem;
+    }
+    .chip {
+      background: #ede9fe;
+      color: #5b21b6;
+      border-radius: 20px;
+      padding: .3rem .9rem;
+      font-size: .82rem;
+      font-weight: 600;
+    }
+
+    /* ── Method cards ─────────────────────────────────────────────── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1.5rem;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e0e0f0;
+      border-radius: 14px;
+      padding: 1.8rem 1.5rem;
+      transition: box-shadow .2s;
+    }
+    .card:hover { box-shadow: 0 8px 30px rgba(124,58,237,.12); }
+    .card-icon { font-size: 2rem; margin-bottom: .8rem; }
+    .card h3   { font-size: 1.05rem; font-weight: 700; margin-bottom: .5rem; color: #1a1a2e; }
+    .card p    { font-size: .9rem; color: #555; line-height: 1.6; }
+    .card .metrics {
+      margin-top: .9rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: .4rem;
+    }
+    .metric-tag {
+      background: #f3f0ff;
+      color: #6d28d9;
+      border-radius: 6px;
+      padding: .15rem .55rem;
+      font-size: .75rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+    }
+
+    /* ── Pipeline figure placeholder ─────────────────────────────── */
+    .figure-wrap {
+      background: #fff;
+      border: 1px solid #e0e0f0;
+      border-radius: 14px;
+      overflow: hidden;
+      margin-top: 1.8rem;
+      text-align: center;
+    }
+    .figure-wrap img { max-width: 100%; display: block; margin: 0 auto; }
+    .figure-caption {
+      padding: .8rem 1.5rem;
+      font-size: .85rem;
+      color: #666;
+      border-top: 1px solid #f0f0f8;
+    }
+
+    /* ── Results section ──────────────────────────────────────────── */
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.2rem;
+      margin-top: 1.5rem;
+    }
+    .stat-card {
+      background: linear-gradient(135deg, #ede9fe, #faf5ff);
+      border: 1px solid #ddd6fe;
+      border-radius: 12px;
+      padding: 1.4rem 1.2rem;
+      text-align: center;
+    }
+    .stat-card .stat-val {
+      font-size: 1.8rem;
+      font-weight: 800;
+      color: #7c3aed;
+      line-height: 1;
+    }
+    .stat-card .stat-label {
+      font-size: .82rem;
+      color: #555;
+      margin-top: .4rem;
+      line-height: 1.4;
+    }
+
+    /* ── Models section ───────────────────────────────────────────── */
+    .models-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .6rem;
+      margin-top: 1rem;
+    }
+    .model-tag {
+      background: #fff;
+      border: 1.5px solid #7c3aed;
+      color: #5b21b6;
+      border-radius: 8px;
+      padding: .4rem .9rem;
+      font-size: .85rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Citation ─────────────────────────────────────────────────── */
+    #citation { background: #f5f3ff; }
+    .bibtex-box {
+      background: #1e1e2e;
+      color: #cdd6f4;
+      border-radius: 12px;
+      padding: 1.5rem 1.8rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .83rem;
+      line-height: 1.8;
+      white-space: pre;
+      overflow-x: auto;
+      position: relative;
+    }
+    .copy-btn {
+      position: absolute;
+      top: .8rem;
+      right: .8rem;
+      background: rgba(255,255,255,.1);
+      color: #cdd6f4;
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 6px;
+      padding: .3rem .7rem;
+      font-size: .78rem;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .copy-btn:hover { background: rgba(255,255,255,.2); }
+
+    /* ── Footer ───────────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 2rem 1.5rem;
+      font-size: .83rem;
+      color: #888;
+      border-top: 1px solid #e8e8f0;
+    }
+    footer a { color: #7c3aed; text-decoration: none; }
+
+    /* ── Utility ──────────────────────────────────────────────────── */
+    h2.section-title {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1.2rem;
+    }
+    .emoji-prefix { margin-right: .4rem; }
+  </style>
+</head>
+
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     HERO
+════════════════════════════════════════════════════════════════════ -->
+<header class="hero">
+  <div class="container">
+    <div class="venue-tag">arXiv 2026 &nbsp;·&nbsp; Medical AI Fairness</div>
+    <h1>
+      <span class="ducx">DUCX</span>: Decomposing Unfairness in<br />
+      Tool-Using Chest X-ray Agents
+    </h1>
+
+    <div class="authors">
+      <a href="#">Zikang Xu</a>
+      <a href="#">Ruinan Jin</a>
+      <a href="#">Xiaoxiao Li</a>
+    </div>
+    <p class="affil">University of British Columbia &nbsp;·&nbsp; TEALab</p>
+
+    <div class="btn-row">
+      <a class="btn btn-paper"
+         href="https://arxiv.org/abs/2603.00777"
+         target="_blank" rel="noopener">
+        📄 Paper (arXiv)
+      </a>
+      <a class="btn btn-code"
+         href="https://github.com/Nanboy-Ronan/DUCK"
+         target="_blank" rel="noopener">
+        <!-- GitHub mark SVG -->
+        <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+          0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28
+          -.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52
+          .28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02
+          .08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04
+          2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87
+          3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38
+          A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+        </svg>
+        Code
+      </a>
+      <a class="btn btn-colab"
+         href="https://colab.research.google.com/github/Nanboy-Ronan/DUCK/blob/main/notebooks/DUCX_quickstart.ipynb"
+         target="_blank" rel="noopener">
+        <!-- Colab icon -->
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#F9AB00"/>
+          <path d="M8 8l8 4-8 4V8z" fill="#000"/>
+        </svg>
+        Quickstart Notebook
+      </a>
+    </div>
+  </div>
+</header>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     ABSTRACT
+════════════════════════════════════════════════════════════════════ -->
+<section id="abstract">
+  <div class="container">
+    <h2 class="section-title">Abstract</h2>
+    <div class="abstract-box">
+      Agentic medical AI systems built on tool-using large language models are increasingly deployed for
+      chest X-ray interpretation, yet their fairness properties remain poorly understood.
+      Prior work evaluates end-to-end accuracy gaps across demographic groups but cannot identify
+      <em>where</em> in the agentic pipeline bias originates.
+      <br /><br />
+      We present <strong>DUCX</strong> (<strong>D</strong>ecomposing <strong>U</strong>nfairness in
+      Tool-Using <strong>C</strong>hest X-ray Agents), a framework that audits MedRAX-style agents
+      at three complementary levels:
+      (1) <strong>tool-exposure bias</strong> — subgroup utility gaps conditioned on whether
+      a specific diagnostic tool was invoked;
+      (2) <strong>tool-transition bias</strong> — subgroup differences in the tool-routing
+      Markov chain traversed during a reasoning trajectory;
+      and (3) <strong>LLM-reasoning bias</strong> — post-tool disparities in answer quality,
+      hedging language, and demographic framing in the final synthesis step.
+      <br /><br />
+      DUCX is evaluated on five driver LLMs — LLaMA3.1-8B, Ministral-3-8B, Qwen3VL-8B,
+      Qwen3-8B, and Gemini-Flash — across two datasets: ChestAgentBench and the newly introduced
+      MIMIC-FairnessVQA benchmark.
+      Our decomposition reveals that bias contributions differ substantially across models and
+      datasets, motivating targeted mitigation strategies beyond aggregate accuracy auditing.
+
+      <div class="tldr-row">
+        <span class="chip">Fairness Audit</span>
+        <span class="chip">Bias Decomposition</span>
+        <span class="chip">Tool-Using Agents</span>
+        <span class="chip">Chest X-ray AI</span>
+        <span class="chip">Demographic Parity</span>
+        <span class="chip">MIMIC-FairnessVQA</span>
+        <span class="chip">5 LLM Backbones</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     METHOD — Three Decomposition Lenses
+════════════════════════════════════════════════════════════════════ -->
+<section id="method">
+  <div class="container">
+    <h2 class="section-title">🔬 Three Bias Lenses</h2>
+    <p style="color:#555; margin-bottom:.5rem;">
+      DUCX decomposes agentic unfairness into three interpretable sources, each with dedicated
+      output metrics that pin-point mitigation targets.
+    </p>
+
+    <div class="cards">
+
+      <!-- Lens 1 -->
+      <div class="card">
+        <div class="card-icon">🛠️</div>
+        <h3>Tool-Exposure Bias</h3>
+        <p>
+          When the same diagnostic tool is invoked, does its accuracy benefit differ by
+          patient demographic? Captures disparities in tool <em>effectiveness</em> across groups.
+        </p>
+        <div class="metrics">
+          <span class="metric-tag">conditional_tool_utility</span>
+          <span class="metric-tag">utility_gap</span>
+        </div>
+      </div>
+
+      <!-- Lens 2 -->
+      <div class="card">
+        <div class="card-icon">🔀</div>
+        <h3>Tool-Transition Bias</h3>
+        <p>
+          Does the agent route male vs. female, or young vs. elderly patients through
+          different sequences of tools? Treats trajectories as Markov chains and measures
+          subgroup divergence.
+        </p>
+        <div class="metrics">
+          <span class="metric-tag">transition_rates</span>
+          <span class="metric-tag">transition_divergence</span>
+        </div>
+      </div>
+
+      <!-- Lens 3 -->
+      <div class="card">
+        <div class="card-icon">🧠</div>
+        <h3>LLM-Reasoning Bias</h3>
+        <p>
+          After tools return results, does the LLM synthesize answers equally well?
+          Measures reasoning quality, hedging / uncertainty expression, and
+          demographic-term frequency disparities.
+        </p>
+        <div class="metrics">
+          <span class="metric-tag">judge_score</span>
+          <span class="metric-tag">hedging_gap</span>
+          <span class="metric-tag">demographic_term_gap</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Pipeline figure — replace src when paper figure is available -->
+    <div class="figure-wrap" style="margin-top:2rem;">
+      <div style="background: linear-gradient(135deg,#ede9fe 0%,#f5f3ff 100%);
+                  padding:3rem 2rem; color:#6d28d9; font-size:1rem; font-weight:600;">
+        📊 Pipeline Figure — Place <code style="font-size:.9rem;">docs/assets/pipeline.png</code>
+        here once generated from the paper
+      </div>
+      <p class="figure-caption">
+        <strong>Figure 1.</strong> DUCX audit pipeline. Agent trajectories are collected for each
+        demographic group, then analyzed through three complementary bias lenses before being
+        aggregated into summary fairness reports.
+      </p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     RESULTS HIGHLIGHTS
+════════════════════════════════════════════════════════════════════ -->
+<section id="results">
+  <div class="container">
+    <h2 class="section-title">📈 Evaluation Highlights</h2>
+
+    <div class="results-grid">
+      <div class="stat-card">
+        <div class="stat-val">5</div>
+        <div class="stat-label">Driver LLMs evaluated<br/>(open &amp; proprietary)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val">2</div>
+        <div class="stat-label">Benchmarks<br/>ChestAgentBench &amp; MIMIC-FairnessVQA</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val">3</div>
+        <div class="stat-label">Decomposition lenses<br/>for bias localization</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val">5+</div>
+        <div class="stat-label">Fairness metrics<br/>ACC · ΔAcc · DP · EoD · FUT</div>
+      </div>
+    </div>
+
+    <div style="margin-top:2rem;">
+      <h3 style="font-weight:700; margin-bottom:.8rem;">Evaluated Driver LLMs</h3>
+      <div class="models-row">
+        <span class="model-tag">LLaMA3.1-8B</span>
+        <span class="model-tag">Ministral-3-8B</span>
+        <span class="model-tag">Qwen3VL-8B</span>
+        <span class="model-tag">Qwen3-8B</span>
+        <span class="model-tag">Gemini-Flash</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     QUICKSTART
+════════════════════════════════════════════════════════════════════ -->
+<section id="quickstart">
+  <div class="container">
+    <h2 class="section-title">🚀 Quickstart</h2>
+    <p style="color:#555; margin-bottom:1.2rem;">
+      Run the full DUCX pipeline — from agent evaluation to fairness decomposition — in a
+      single notebook, no local GPU required for the dry-run.
+    </p>
+    <a class="btn btn-colab"
+       href="https://colab.research.google.com/github/Nanboy-Ronan/DUCK/blob/main/notebooks/DUCX_quickstart.ipynb"
+       target="_blank" rel="noopener"
+       style="font-size:1rem; padding:.7rem 1.6rem;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="#F9AB00"/>
+        <path d="M8 8l8 4-8 4V8z" fill="#000"/>
+      </svg>
+      Open Quickstart in Google Colab
+    </a>
+
+    <div style="margin-top:2rem; background:#fff; border:1px solid #e0e0f0; border-radius:12px; padding:1.5rem 1.8rem;">
+      <p style="font-weight:700; margin-bottom:.8rem;">Or run locally:</p>
+      <pre style="background:#1e1e2e; color:#cdd6f4; border-radius:8px; padding:1.2rem 1.5rem;
+                  font-family:'JetBrains Mono',monospace; font-size:.83rem; overflow-x:auto;
+                  line-height:1.8;">git clone https://github.com/Nanboy-Ronan/DUCK.git
+cd DUCK
+conda env create -f environment.yml
+conda activate ducx
+jupyter notebook notebooks/DUCX_quickstart.ipynb</pre>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     CITATION
+════════════════════════════════════════════════════════════════════ -->
+<section id="citation">
+  <div class="container">
+    <h2 class="section-title">📖 Citation</h2>
+    <p style="color:#555; margin-bottom:1.2rem;">
+      If you use DUCX in your research, please cite:
+    </p>
+    <div style="position:relative;">
+      <div class="bibtex-box" id="bibtex-content">@article{xu2026ducx,
+  title   = {DUCX: Decomposing Unfairness in Tool-Using Chest X-ray Agents},
+  author  = {Xu, Zikang and Jin, Ruinan and Li, Xiaoxiao},
+  journal = {arXiv preprint arXiv:2603.00777},
+  year    = {2026}
+}</div>
+      <button class="copy-btn" onclick="copyBibtex()" id="copy-btn">Copy</button>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     FOOTER
+════════════════════════════════════════════════════════════════════ -->
+<footer>
+  <p>
+    DUCX &nbsp;·&nbsp;
+    <a href="https://arxiv.org/abs/2603.00777" target="_blank">arXiv:2603.00777</a> &nbsp;·&nbsp;
+    <a href="https://github.com/Nanboy-Ronan/DUCK" target="_blank">GitHub</a> &nbsp;·&nbsp;
+    Released under the <a href="https://github.com/Nanboy-Ronan/DUCK/blob/main/LICENSE">Apache 2.0 License</a>
+  </p>
+  <p style="margin-top:.4rem;">Built on <a href="https://github.com/bowang-lab/MedRAX" target="_blank">MedRAX</a>. See NOTICE for attribution.</p>
+</footer>
+
+
+<script>
+  function copyBibtex() {
+    const text = document.getElementById('bibtex-content').innerText;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById('copy-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    });
+  }
+</script>
+
+</body>
+</html>

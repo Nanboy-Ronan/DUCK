@@ -6,6 +6,8 @@
 <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
 <a href="https://2026.miccai.org/"><img src="https://img.shields.io/badge/MICCAI-2026_early_accept-5b8c5a.svg?style=flat-square" alt="MICCAI 2026"></a>
 <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat-square&logo=python" alt="Python"></a>
+<a href="https://colab.research.google.com/github/Nanboy-Ronan/DUCK/blob/main/notebooks/DUCX_quickstart.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in Colab"></a>
+<a href="https://nanboy-ronan.github.io/DUCK/"><img src="https://img.shields.io/badge/🌐_Project-Page-7c3aed.svg?style=flat-square" alt="Project Page"></a>
 
 Zikang Xu<sup>1*</sup> · Ruinan Jin<sup>2,3*</sup> · Xiaoxiao Li<sup>2,3†</sup>
 
@@ -19,7 +21,7 @@ Zikang Xu<sup>1*</sup> · Ruinan Jin<sup>2,3*</sup> · Xiaoxiao Li<sup>2,3†</s
 
 <sup>†</sup> Corresponding author
 
-[📄 Paper](https://arxiv.org/abs/2603.00777) · [🤗 Data](#) · [📊 Quickstart](notebooks/DUCX_quickstart.ipynb)
+[📄 Paper](https://arxiv.org/abs/2603.00777) · [🤗 Data](#) · [📊 Quickstart](https://colab.research.google.com/github/Nanboy-Ronan/DUCK/blob/main/notebooks/DUCX_quickstart.ipynb) · [🌐 Project Page](https://nanboy-ronan.github.io/DUCK/)
 
 </div>
 
