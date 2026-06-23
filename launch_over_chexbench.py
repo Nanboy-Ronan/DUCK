@@ -21,7 +21,6 @@ import argparse
 import json
 import logging
 import os
-import re
 import signal
 import base64
 from glob import glob
@@ -61,7 +60,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-file", default="data/chestagentbench/metadata.jsonl")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--answer-retries", type=int, default=2)
-    parser.add_argument("--llm-parse", action="store_true")
+    parser.add_argument(
+        "--llm-parse",
+        dest="llm_parse",
+        action="store_true",
+        default=True,
+        help="Use an LLM parser to extract final answer choices. Enabled by default.",
+    )
+    parser.add_argument(
+        "--no-llm-parse",
+        dest="llm_parse",
+        action="store_false",
+        help="Disable LLM answer parsing; only exact single-letter outputs are accepted.",
+    )
+    parser.add_argument(
+        "--parse-model",
+        default=os.getenv("DUCK_PARSE_MODEL", "gemini-3-flash-preview"),
+        help="Gemini model used for answer parsing when GEMINI_API_KEY/GOOGLE_API_KEY is available.",
+    )
     parser.add_argument("--disable-tools", action="store_true")
     parser.add_argument("--disable-parallel-tool-calls", action="store_true")
     parser.add_argument("--gemini-native", action="store_true")
@@ -163,7 +179,39 @@ def load_completed_question_ids(
     return completed, parsed_lines, summary
 
 
-def normalize_image_paths(raw_paths) -> List[str]:
+def _dedupe_paths(paths: List[str]) -> List[str]:
+    seen = set()
+    deduped = []
+    for path in paths:
+        if path and path not in seen:
+            deduped.append(path)
+            seen.add(path)
+    return deduped
+
+
+def _image_path_candidates(path: str, data_file: Optional[str] = None) -> List[str]:
+    raw = os.path.expanduser(path)
+    candidates = []
+
+    if os.path.isabs(raw):
+        candidates.append(raw)
+    else:
+        candidates.append(raw)
+        clean_path = raw.replace("figures/", "")
+        candidates.append(os.path.join("figures", clean_path))
+
+    if data_file:
+        data_dir = os.path.dirname(data_file)
+        abs_data_dir = os.path.dirname(os.path.abspath(data_file))
+        for root in _dedupe_paths([data_dir, abs_data_dir]):
+            candidates.append(os.path.join(root, raw))
+            candidates.append(os.path.join(root, raw.replace("figures/", "")))
+            candidates.append(os.path.join(root, "figures", raw.replace("figures/", "")))
+
+    return _dedupe_paths(candidates)
+
+
+def normalize_image_paths(raw_paths, data_file: Optional[str] = None) -> List[str]:
     if isinstance(raw_paths, str):
         raw_paths = [raw_paths]
     elif isinstance(raw_paths, list) and raw_paths and isinstance(raw_paths[0], list):
@@ -173,10 +221,10 @@ def normalize_image_paths(raw_paths) -> List[str]:
     for path in raw_paths or []:
         if not path or not isinstance(path, str):
             continue
-        clean_path = path.replace("figures/", "")
-        full_path = os.path.join("figures", clean_path)
-        if os.path.exists(full_path):
-            normalized.append(full_path)
+        for candidate in _image_path_candidates(path, data_file=data_file):
+            if os.path.exists(candidate):
+                normalized.append(candidate)
+                break
     return normalized
 
 
@@ -243,7 +291,11 @@ def build_message(example: dict, image_paths: List[str]) -> str:
     return "\n".join(lines)
 
 
+VALID_CHOICES = {"A", "B", "C", "D", "E", "F"}
+
+
 def extract_choice(text: str) -> Optional[str]:
+    """Accept only an exact answer letter without local regex extraction."""
     if text is None:
         return None
     if isinstance(text, list):
@@ -252,22 +304,20 @@ def extract_choice(text: str) -> Optional[str]:
         text = json.dumps(text)
     else:
         text = str(text)
-    if not text:
+    normalized = text.strip().upper()
+    if not normalized:
         return None
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    for line in reversed(lines):
-        match = re.fullmatch(r"([A-F])", line, re.IGNORECASE)
-        if match:
-            return match.group(1).upper()
-    matches = re.findall(r"\b([A-F])\b", text, re.IGNORECASE)
-    return matches[-1].upper() if matches else None
+    return normalized if normalized in VALID_CHOICES else None
 
 
 def parse_choice_with_llm(client, model: str, content: Optional[str]) -> Optional[str]:
     if not content:
         return None
     messages = [
-        {"role": "system", "content": "Extract the single answer choice letter (A-F) from the model output."},
+        {
+            "role": "system",
+            "content": "Extract the final answer choice. Reply with exactly one uppercase letter A, B, C, D, E, or F. If no answer is present, reply NONE.",
+        },
         {"role": "user", "content": content},
     ]
     try:
@@ -287,7 +337,9 @@ def parse_choice_with_gemini(model, content: Optional[str]) -> Optional[str]:
     if not content:
         return None
     messages = [
-        SystemMessage(content="Extract the single answer choice letter (A-F) from the model output."),
+        SystemMessage(
+            content="Extract the final answer choice. Reply with exactly one uppercase letter A, B, C, D, E, or F. If no answer is present, reply NONE."
+        ),
         HumanMessage(content=content),
     ]
     try:
@@ -331,6 +383,22 @@ def answer_with_gemini(model, prompt_text: str) -> Optional[str]:
         return None
 
 
+def build_gemini_parser(model_name: str, api_key: str):
+    try:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+    except Exception as exc:
+        raise SystemExit(
+            "Gemini answer parsing requires `langchain-google-genai`. "
+            "Install it with: pip install langchain-google-genai google-generativeai"
+        ) from exc
+    return ChatGoogleGenerativeAI(
+        model=model_name,
+        temperature=0.0,
+        top_p=1.0,
+        google_api_key=api_key,
+    )
+
+
 def invoke_with_retries(
     agent,
     base_messages: List[dict],
@@ -357,9 +425,11 @@ def invoke_with_retries(
         )
         trace = serialize_messages(result.get("messages"))
         response_text = result["messages"][-1].content if result.get("messages") else None
-        predicted = extract_choice(response_text or "")
-        if not predicted and llm_parse and parse_choice_fn:
+        predicted = None
+        if llm_parse and parse_choice_fn:
             predicted = parse_choice_fn(response_text)
+        else:
+            predicted = extract_choice(response_text or "")
         if predicted:
             return response_text, predicted, attempts, trace
     if llm_parse and base_messages and answer_fn:
@@ -420,6 +490,11 @@ def main() -> None:
     answer_fn = None
     direct_model = None
     gemini_key = None
+    parser_gemini_key = (
+        args.gemini_api_key
+        or os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+    )
 
     if args.gemini_native:
         gemini_key = (
@@ -434,14 +509,9 @@ def main() -> None:
             tools = []
         use_direct = len(tools) == 0
         if use_direct or args.llm_parse:
-            try:
-                from langchain_google_genai import ChatGoogleGenerativeAI
-            except Exception as exc:
-                raise SystemExit(
-                    "Gemini native backend requires `langchain-google-genai`. "
-                    "Install it with: pip install langchain-google-genai google-generativeai"
-                ) from exc
             if use_direct:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+
                 direct_model = ChatGoogleGenerativeAI(
                     model=args.model,
                     temperature=args.temperature,
@@ -449,12 +519,7 @@ def main() -> None:
                     google_api_key=gemini_key,
                 )
             if args.llm_parse:
-                parser_model = ChatGoogleGenerativeAI(
-                    model=args.model,
-                    temperature=0.0,
-                    top_p=1.0,
-                    google_api_key=gemini_key,
-                )
+                parser_model = build_gemini_parser(args.parse_model, gemini_key)
                 parse_choice_fn = lambda content: parse_choice_with_gemini(parser_model, content)
                 answer_fn = lambda prompt: answer_with_gemini(parser_model, prompt)
     else:
@@ -474,8 +539,16 @@ def main() -> None:
         use_direct = len(tools) == 0
         parse_client = openai.OpenAI(**openai_kwargs)
         if args.llm_parse:
-            parse_choice_fn = lambda content: parse_choice_with_llm(parse_client, args.model, content)
-            answer_fn = lambda prompt: answer_with_llm(parse_client, args.model, prompt)
+            if parser_gemini_key:
+                parser_model = build_gemini_parser(args.parse_model, parser_gemini_key)
+                parse_choice_fn = lambda content: parse_choice_with_gemini(parser_model, content)
+                answer_fn = lambda prompt: answer_with_gemini(parser_model, prompt)
+            else:
+                print(
+                    "Warning: GEMINI_API_KEY/GOOGLE_API_KEY is not set; falling back to the driver model for LLM answer parsing."
+                )
+                parse_choice_fn = lambda content: parse_choice_with_llm(parse_client, args.model, content)
+                answer_fn = lambda prompt: answer_with_llm(parse_client, args.model, prompt)
 
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(args.temp_dir, exist_ok=True)
@@ -572,7 +645,7 @@ def main() -> None:
             break
 
         processed += 1
-        image_paths = normalize_image_paths(example.get("images"))
+        image_paths = normalize_image_paths(example.get("images"), data_file=args.data_file)
         if not image_paths:
             skipped += 1
             log_entry = {
@@ -627,9 +700,11 @@ def main() -> None:
                             top_p=args.top_p,
                         )
                         response_text = response.choices[0].message.content if response.choices else None
-                    predicted = extract_choice(response_text or "")
-                    if not predicted and args.llm_parse and parse_choice_fn:
+                    predicted = None
+                    if args.llm_parse and parse_choice_fn:
                         predicted = parse_choice_fn(response_text)
+                    else:
+                        predicted = extract_choice(response_text or "")
                     if predicted:
                         break
                 if not predicted and args.llm_parse and answer_fn:
