@@ -280,12 +280,11 @@ def build_direct_prompt(example: dict) -> str:
         "Given the following medical case:\n"
         "Please answer this multiple choice question:\n"
         f"{question}\n\n"
-        "Base your answer only on the provided images and case information.\n"
-        f"{ANSWER_ONLY_PROMPT}"
+        "Base your answer only on the provided images and case information."
     )
 
 
-def build_agent_messages(example: dict, image_paths: List[str]) -> List[dict]:
+def build_agent_messages(prompt_text: str, image_paths: List[str]) -> List[dict]:
     """Mirror Bo Wang MedRAX interface.py: path message, image bytes, user text."""
     messages = []
     for path in image_paths:
@@ -309,12 +308,53 @@ def build_agent_messages(example: dict, image_paths: List[str]) -> List[dict]:
             "content": [
                 {
                     "type": "text",
-                    "text": f"{example.get('question', '')}\n\n{ANSWER_ONLY_PROMPT}",
+                    "text": prompt_text,
                 }
             ],
         }
     )
     return messages
+
+
+def load_first_jsonl_example(path: str) -> Optional[dict]:
+    with open(path, "r") as handle:
+        for line in handle:
+            line = line.strip()
+            if line:
+                return json.loads(line)
+    return None
+
+
+def load_named_prompt(path: str, name: str) -> Optional[str]:
+    current_name = None
+    current_lines = []
+    prompts = {}
+    with open(path, "r") as handle:
+        for raw_line in handle:
+            line = raw_line.rstrip("\n")
+            if line.startswith("[") and line.endswith("]"):
+                if current_name is not None:
+                    prompts[current_name] = "\n".join(current_lines).strip()
+                current_name = line[1:-1]
+                current_lines = []
+            else:
+                current_lines.append(line)
+    if current_name is not None:
+        prompts[current_name] = "\n".join(current_lines).strip()
+    return prompts.get(name)
+
+
+def redact_base64_payload(content):
+    if isinstance(content, str):
+        if content.startswith("data:image/") and ";base64," in content:
+            prefix, payload = content.split(";base64,", 1)
+            return f"{prefix};base64,<redacted {len(payload)} chars>"
+        return content
+    if isinstance(content, list):
+        return [redact_base64_payload(item) for item in content]
+    if isinstance(content, dict):
+        return {key: redact_base64_payload(value) for key, value in content.items()}
+    return content
 
 
 VALID_CHOICES = {"A", "B", "C", "D", "E", "F"}
@@ -370,20 +410,6 @@ def parse_choice_with_gemini(model, content: Optional[str]) -> Optional[str]:
         return None
 
 
-def answer_with_gemini(model, prompt_text: str) -> Optional[str]:
-    if not prompt_text:
-        return None
-    messages = [
-        SystemMessage(content="You are a medical imaging expert. Reply with a single letter A-F only."),
-        HumanMessage(content=f"{prompt_text}\n\nAnswer with a single letter A-F only."),
-    ]
-    try:
-        response = model.invoke(messages)
-        return extract_choice(getattr(response, "content", "") or "")
-    except Exception:
-        return None
-
-
 def build_gemini_parser(model_name: str, api_key: str):
     try:
         from langchain_google_genai import ChatGoogleGenerativeAI
@@ -406,7 +432,6 @@ def invoke_with_retries(
     max_retries: int,
     llm_parse: bool,
     parse_choice_fn,
-    answer_fn,
     thread_id: str,
 ):
     response_text = None
@@ -429,11 +454,6 @@ def invoke_with_retries(
             predicted = extract_choice(response_text or "")
         if predicted:
             return response_text, predicted, attempts, trace
-    if llm_parse and base_messages and answer_fn:
-        prompt_text = content_to_text(base_messages[-1].get("content", ""))
-        fallback = answer_fn(prompt_text)
-        if fallback:
-            return response_text, fallback, attempts + 1, trace
     return response_text, predicted, attempts, trace
 
 
@@ -464,6 +484,8 @@ def main() -> None:
             "LlavaMedTool",
             "XRayPhraseGroundingTool",
         ]
+    if args.disable_tools:
+        tools = []
 
     config = {
         "prompt_file": args.prompt_file,
@@ -478,13 +500,37 @@ def main() -> None:
     }
 
     if args.dry_run:
-        print(json.dumps({"dry_run": True, "config": config}, indent=2))
+        preview = None
+        example = load_first_jsonl_example(args.data_file)
+        if example:
+            image_paths = normalize_image_paths(example.get("images"), data_file=args.data_file)
+            prompt_text = build_direct_prompt(example)
+            system_prompt = load_named_prompt(args.prompt_file, "MEDICAL_ASSISTANT")
+            direct_content = build_multimodal_content(prompt_text, image_paths)
+            direct_messages = [
+                {"role": "system", "content": ANSWER_ONLY_PROMPT},
+                {"role": "user", "content": direct_content},
+            ]
+            agent_messages = build_agent_messages(prompt_text, image_paths)
+            active_path = "direct" if len(tools) == 0 or args.disable_tools else "agent"
+            preview = {
+                "question_id": example.get("question_id", "unknown"),
+                "active_path": active_path,
+                "system_prompt_file": args.prompt_file,
+                "system_prompt_key": "MEDICAL_ASSISTANT",
+                "agent_first_model_call": redact_base64_payload(
+                    [{"role": "system", "content": system_prompt}] + agent_messages
+                ),
+                "direct_first_model_call": redact_base64_payload(direct_messages),
+                "user_prompt_text": prompt_text,
+                "image_paths": image_paths,
+            }
+        print(json.dumps({"dry_run": True, "config": config, "preview": preview}, indent=2))
         return
 
     openai_kwargs = {}
     parse_client = None
     parse_choice_fn = None
-    answer_fn = None
     parser_backend = "none"
     direct_model = None
     gemini_key = None
@@ -519,7 +565,6 @@ def main() -> None:
             if args.llm_parse:
                 parser_model = build_gemini_parser(args.parse_model, gemini_key)
                 parse_choice_fn = lambda content: parse_choice_with_gemini(parser_model, content)
-                answer_fn = lambda prompt: answer_with_gemini(parser_model, prompt)
                 parser_backend = f"gemini:{args.parse_model}"
     else:
         from medrax.utils.utils import resolve_openai_client_kwargs
@@ -541,7 +586,6 @@ def main() -> None:
             if parser_gemini_key:
                 parser_model = build_gemini_parser(args.parse_model, parser_gemini_key)
                 parse_choice_fn = lambda content: parse_choice_with_gemini(parser_model, content)
-                answer_fn = lambda prompt: answer_with_gemini(parser_model, prompt)
                 parser_backend = f"gemini:{args.parse_model}"
             else:
                 raise SystemExit(
@@ -665,7 +709,7 @@ def main() -> None:
             continue
 
         direct_prompt = build_direct_prompt(example)
-        messages = build_agent_messages(example, image_paths)
+        messages = build_agent_messages(direct_prompt, image_paths)
 
         try:
             if use_direct:
@@ -706,8 +750,6 @@ def main() -> None:
                         predicted = extract_choice(response_text or "")
                     if predicted:
                         break
-                if not predicted and args.llm_parse and answer_fn:
-                    predicted = answer_fn(direct_prompt)
             else:
                 response_text, predicted, attempts, trace = invoke_with_retries(
                     agent,
@@ -715,7 +757,6 @@ def main() -> None:
                     max(0, args.answer_retries),
                     args.llm_parse,
                     parse_choice_fn,
-                    answer_fn,
                     thread_id=str(example.get("question_id", processed)),
                 )
             if not predicted:
