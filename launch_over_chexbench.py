@@ -476,7 +476,7 @@ def main() -> None:
         # Default: exclude generator tool to avoid requiring RoentGen weights.
         tools = [
             "ImageVisualizerTool",
-            "DicomProcessorTool",
+            # "DicomProcessorTool",
             "ChestXRayClassifierTool",
             "ChestXRaySegmentationTool",
             "ChestXRayReportGeneratorTool",

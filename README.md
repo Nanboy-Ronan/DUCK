@@ -161,16 +161,6 @@ DUCX decomposes agent unfairness through three lenses:
 
 All outputs are under the analysis `--out-dir`, including `group_performance.csv`, `summary_report.md`, and optional bootstrap confidence intervals.
 
-## 🖥️ Gradio Demo
-
-Launch the interactive chat interface with chest X-ray tools:
-
-```bash
-python main.py
-```
-
-Opens on `http://0.0.0.0:8585`. Supports image upload, DICOM processing, and real-time tool execution with streaming responses.
-
 ## 🧪 Supported Driver LLMs
 
 | Model | Backend | Notes |
@@ -206,6 +196,7 @@ Use `--model`, `OPENAI_BASE_URL`, and the Gemini flags in `launch_over_chexbench
 ```
 
 ## 🎯 Paper Metrics
+During the development of this paper, we launched the MedRAX from the original MedRAX repo (`quickstart.py`) and collect log to perform fairness auditing using scripts in `analysis`. This repo tries to reproduce the MedRAX launch through `launch_over_chexbench.py` by giving user the option to 1) removing the unnecessary tools 2) make the robust launch and retry 3) optimize the logging.
 
 - **ACC**: Overall accuracy
 - **Δ-ACC**: Absolute subgroup accuracy gap
