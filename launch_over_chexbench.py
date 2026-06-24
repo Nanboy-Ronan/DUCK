@@ -59,7 +59,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-cases", type=int, default=None)
     parser.add_argument("--data-file", default="data/chestagentbench/metadata.jsonl")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--answer-retries", type=int, default=2)
+    parser.add_argument("--answer-retries", type=int, default=0)
     parser.add_argument(
         "--llm-parse",
         dest="llm_parse",
@@ -271,66 +271,82 @@ def serialize_messages(messages):
     return serialized
 
 
-def build_message(example: dict, image_paths: List[str]) -> str:
+ANSWER_ONLY_PROMPT = "You are a medical imaging expert. Provide only the letter corresponding to your answer choice (A/B/C/D/E/F)."
+
+
+def build_direct_prompt(example: dict) -> str:
     question = example.get("question", "")
-    explanation = example.get("explanation", "")
-    lines = [
-        "Given the following medical case:",
-        question,
-        "",
-        "Base your answer only on the provided images and case information.",
-    ]
-    if explanation:
-        lines.extend(["", "Case details:", explanation])
-    lines.append("")
-    lines.append("Image paths (local files):")
+    return (
+        "Given the following medical case:\n"
+        "Please answer this multiple choice question:\n"
+        f"{question}\n\n"
+        "Base your answer only on the provided images and case information.\n"
+        f"{ANSWER_ONLY_PROMPT}"
+    )
+
+
+def build_agent_messages(example: dict, image_paths: List[str]) -> List[dict]:
+    """Mirror Bo Wang MedRAX interface.py: path message, image bytes, user text."""
+    messages = []
     for path in image_paths:
-        lines.append(f"- {path}")
-    lines.append("")
-    lines.append("Use available tools as needed. When calling tools, use the image paths exactly.")
-    return "\n".join(lines)
+        messages.append({"role": "user", "content": f"image_path: {path}"})
+        encoded = encode_image(path)
+        if encoded:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/jpeg;base64,{encoded}"},
+                        }
+                    ],
+                }
+            )
+    messages.append(
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"{example.get('question', '')}\n\n{ANSWER_ONLY_PROMPT}",
+                }
+            ],
+        }
+    )
+    return messages
 
 
 VALID_CHOICES = {"A", "B", "C", "D", "E", "F"}
 
 
-def extract_choice(text: str) -> Optional[str]:
+def content_to_text(content) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, dict):
+        if "text" in content:
+            return str(content.get("text") or "")
+        if "content" in content:
+            return content_to_text(content.get("content"))
+        return json.dumps(content)
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            text = content_to_text(item)
+            if text:
+                parts.append(text)
+        return "\n".join(parts)
+    return str(content)
+
+
+def extract_choice(text) -> Optional[str]:
     """Accept only an exact answer letter without local regex extraction."""
-    if text is None:
-        return None
-    if isinstance(text, list):
-        text = "\n".join(str(item) for item in text)
-    elif isinstance(text, dict):
-        text = json.dumps(text)
-    else:
-        text = str(text)
-    normalized = text.strip().upper()
+    normalized = content_to_text(text).strip().upper()
     if not normalized:
         return None
     return normalized if normalized in VALID_CHOICES else None
-
-
-def parse_choice_with_llm(client, model: str, content: Optional[str]) -> Optional[str]:
-    if not content:
-        return None
-    messages = [
-        {
-            "role": "system",
-            "content": "Extract the final answer choice. Reply with exactly one uppercase letter A, B, C, D, E, or F. If no answer is present, reply NONE.",
-        },
-        {"role": "user", "content": content},
-    ]
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=5,
-            temperature=0.0,
-        )
-        parsed = response.choices[0].message.content if response.choices else None
-        return extract_choice(parsed or "")
-    except Exception:
-        return None
 
 
 def parse_choice_with_gemini(model, content: Optional[str]) -> Optional[str]:
@@ -338,33 +354,18 @@ def parse_choice_with_gemini(model, content: Optional[str]) -> Optional[str]:
         return None
     messages = [
         SystemMessage(
-            content="Extract the final answer choice. Reply with exactly one uppercase letter A, B, C, D, E, or F. If no answer is present, reply NONE."
+            content=(
+                "You are an answer parser. Extract the final multiple-choice answer "
+                "selected by the assistant response. Do not solve the medical question. "
+                "Reply with exactly one uppercase letter A, B, C, D, E, or F. If the "
+                "assistant response does not select an answer, reply NONE."
+            )
         ),
-        HumanMessage(content=content),
+        HumanMessage(content=f"ASSISTANT_RESPONSE:\n{content_to_text(content)}"),
     ]
     try:
         response = model.invoke(messages)
         return extract_choice(getattr(response, "content", "") or "")
-    except Exception:
-        return None
-
-
-def answer_with_llm(client, model: str, prompt_text: str) -> Optional[str]:
-    if not prompt_text:
-        return None
-    messages = [
-        {"role": "system", "content": "You are a medical imaging expert. Reply with a single letter A-F only."},
-        {"role": "user", "content": f"{prompt_text}\n\nAnswer with a single letter A-F only."},
-    ]
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=5,
-            temperature=0.0,
-        )
-        content = response.choices[0].message.content if response.choices else None
-        return extract_choice(content or "")
     except Exception:
         return None
 
@@ -415,10 +416,6 @@ def invoke_with_retries(
     while attempts <= max_retries:
         attempts += 1
         attempt_messages = base_messages
-        if attempts > 1:
-            attempt_messages = base_messages + [
-                {"role": "user", "content": "Answer with a single letter A-F only. No other text."}
-            ]
         result = agent.workflow.invoke(
             {"messages": attempt_messages},
             config={"configurable": {"thread_id": thread_id}},
@@ -433,7 +430,7 @@ def invoke_with_retries(
         if predicted:
             return response_text, predicted, attempts, trace
     if llm_parse and base_messages and answer_fn:
-        prompt_text = base_messages[0].get("content", "")
+        prompt_text = content_to_text(base_messages[-1].get("content", ""))
         fallback = answer_fn(prompt_text)
         if fallback:
             return response_text, fallback, attempts + 1, trace
@@ -488,6 +485,7 @@ def main() -> None:
     parse_client = None
     parse_choice_fn = None
     answer_fn = None
+    parser_backend = "none"
     direct_model = None
     gemini_key = None
     parser_gemini_key = (
@@ -522,6 +520,7 @@ def main() -> None:
                 parser_model = build_gemini_parser(args.parse_model, gemini_key)
                 parse_choice_fn = lambda content: parse_choice_with_gemini(parser_model, content)
                 answer_fn = lambda prompt: answer_with_gemini(parser_model, prompt)
+                parser_backend = f"gemini:{args.parse_model}"
     else:
         from medrax.utils.utils import resolve_openai_client_kwargs
 
@@ -543,12 +542,13 @@ def main() -> None:
                 parser_model = build_gemini_parser(args.parse_model, parser_gemini_key)
                 parse_choice_fn = lambda content: parse_choice_with_gemini(parser_model, content)
                 answer_fn = lambda prompt: answer_with_gemini(parser_model, prompt)
+                parser_backend = f"gemini:{args.parse_model}"
             else:
-                print(
-                    "Warning: GEMINI_API_KEY/GOOGLE_API_KEY is not set; falling back to the driver model for LLM answer parsing."
+                raise SystemExit(
+                    "GEMINI_API_KEY or GOOGLE_API_KEY is required for --llm-parse. "
+                    "Refusing to parse answers with the driver model. Export a Gemini "
+                    "key or pass --no-llm-parse to accept only exact single-letter outputs."
                 )
-                parse_choice_fn = lambda content: parse_choice_with_llm(parse_client, args.model, content)
-                answer_fn = lambda prompt: answer_with_llm(parse_client, args.model, prompt)
 
     os.makedirs(args.model_dir, exist_ok=True)
     os.makedirs(args.temp_dir, exist_ok=True)
@@ -563,6 +563,7 @@ def main() -> None:
         log_dir, f"{log_prefix}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     )
     setup_logging(log_filename)
+    print(f"Answer parser: {parser_backend}")
 
     shutdown = {"requested": False}
 
@@ -663,8 +664,8 @@ def main() -> None:
             print(f"Skipped question: {example.get('question_id', 'unknown')}")
             continue
 
-        message = build_message(example, image_paths)
-        messages = [{"role": "user", "content": message}]
+        direct_prompt = build_direct_prompt(example)
+        messages = build_agent_messages(example, image_paths)
 
         try:
             if use_direct:
@@ -677,11 +678,9 @@ def main() -> None:
                     extra = None
                     if attempts > 1:
                         extra = "Answer with a single letter A-F only. No other text."
-                    content = build_multimodal_content(message, image_paths, extra_text=extra)
+                    content = build_multimodal_content(direct_prompt, image_paths, extra_text=extra)
                     if args.gemini_native:
-                        system_msg = SystemMessage(
-                            content="You are a medical imaging expert. Provide only the letter corresponding to your answer choice (A/B/C/D/E/F)."
-                        )
+                        system_msg = SystemMessage(content=ANSWER_ONLY_PROMPT)
                         user_msg = HumanMessage(content=content)
                         response = direct_model.invoke([system_msg, user_msg])
                         response_text = getattr(response, "content", None)
@@ -691,7 +690,7 @@ def main() -> None:
                             messages=[
                                 {
                                     "role": "system",
-                                    "content": "You are a medical imaging expert. Provide only the letter corresponding to your answer choice (A/B/C/D/E/F).",
+                                    "content": ANSWER_ONLY_PROMPT,
                                 },
                                 {"role": "user", "content": content},
                             ],
@@ -708,7 +707,7 @@ def main() -> None:
                     if predicted:
                         break
                 if not predicted and args.llm_parse and answer_fn:
-                    predicted = answer_fn(messages[0]["content"])
+                    predicted = answer_fn(direct_prompt)
             else:
                 response_text, predicted, attempts, trace = invoke_with_retries(
                     agent,
@@ -727,6 +726,7 @@ def main() -> None:
                     "status": "invalid_answer",
                     "model": args.model,
                     "temperature": args.temperature,
+                    "answer_parser": parser_backend,
                     "attempts": attempts,
                     "input": {
                         "question": example.get("question"),
@@ -751,6 +751,7 @@ def main() -> None:
                 "status": "ok",
                 "model": args.model,
                 "temperature": args.temperature,
+                "answer_parser": parser_backend,
                 "input": {
                     "question": example.get("question"),
                     "explanation": example.get("explanation", ""),
@@ -775,6 +776,8 @@ def main() -> None:
                 "timestamp": datetime.now().isoformat(),
                 "status": "error",
                 "error": str(exc),
+                "model": args.model,
+                "answer_parser": parser_backend,
                 "input": {
                     "question": example.get("question"),
                     "explanation": example.get("explanation", ""),
