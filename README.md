@@ -1,10 +1,10 @@
 <div align="center">
 
-# 🏥 DUCK: Decomposing Unfairness in Tool-Using Chest X-ray Agents
+# 🏥 DUCK: Decomposing Unfairness in Tool-Using Chest X-ray Agents (MICCAI 2026 Oral)
 
 <a href="https://arxiv.org/abs/2603.00777"><img src="https://img.shields.io/badge/arXiv-2603.00777-b31b1b.svg?style=flat-square" alt="arXiv"></a>
 <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
-<a href="https://2026.miccai.org/"><img src="https://img.shields.io/badge/MICCAI-2026_early_accept-5b8c5a.svg?style=flat-square" alt="MICCAI 2026"></a>
+<a href="https://2026.miccai.org/"><img src="https://img.shields.io/badge/MICCAI-2026_Oral-5b8c5a.svg?style=flat-square" alt="MICCAI 2026"></a>
 <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat-square&logo=python" alt="Python"></a>
 <a href="https://colab.research.google.com/github/Nanboy-Ronan/DUCK/blob/main/notebooks/DUCX_quickstart.ipynb"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in Colab"></a>
 <a href="https://nanboy-ronan.github.io/DUCK/"><img src="https://img.shields.io/badge/🌐_Project-Page-7c3aed.svg?style=flat-square" alt="Project Page"></a>
