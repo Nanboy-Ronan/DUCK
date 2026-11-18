@@ -209,15 +209,13 @@ These are computed by `analysis/compute_fairness_metrics.py` from the `per_quest
 ## 📝 Citation
 
 ```bibtex
-@InProceedings{XuZik_DUCX_MICCAI2026,
-        author = { Xu, Zikang AND Jin, Ruinan AND Li, Xiaoxiao},
-        title = { { DUCX: Decomposing Unfairness in Tool-Using Chest X-Ray Agents } },
-        booktitle = {Medical Image Computing and Computer Assisted Intervention -- MICCAI 2026},
-        year = {2026},
-        publisher = {Springer Nature Switzerland},
-        volume = {LNCS 16882},
-        month = {September},
-        page = {pending}
+@inproceedings{xu2026ducx,
+  title={Ducx: Decomposing unfairness in tool-using chest x-ray agents},
+  author={Xu, Zikang and Jin, Ruinan and Li, Xiaoxiao},
+  booktitle={International Conference on Medical Image Computing and Computer-Assisted Intervention},
+  pages={227--237},
+  year={2026},
+  organization={Springer}
 }
 ```
 
